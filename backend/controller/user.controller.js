@@ -2,44 +2,15 @@ import { z } from "zod";
 import bcrypt from "bcrypt";
 import { user } from "../models/user.model.js";
 import sanitizeHtml from "sanitize-html"
-const userSchema = z.object({
-  name: z
-    .string()
-    .min(3, { message: "Name must be at least 4 characters long" })
-    .max(30, { message: "Name must be less than 30 characters" })
-    .regex(/^[a-zA-Z\s]+$/, "Name can only contain letters"),
-  email: z.string().email("Invalid email address"),
-  password: z
-    .string()
-    .min(6, "Password should be minimum 6 character long")
-    .max(15, "Password must be less than 15 characters"),
-  phone: z
-    .string()
-    .length(10, "Phone number must be 10 digits")
-    .regex(/^\d+$/, "Phone number can only contain numbers"),
-  terms: z.boolean().refine((val) => val === true, {
-    message: "You must accept the terms and conditions",
-  }),
-});
+
 const registerUser = async (req, res) => {
   try {
-
-    const sanitizedData = {
-      name: sanitizeHtml(req.body.name, { allowedTags: [], allowedAttributes: {} }),
-      email: sanitizeHtml(req.body.email, { allowedTags: [], allowedAttributes: {} }),
-      password: sanitizeHtml(req.body.password, {allowedTags:[], allowedAttributes:[]}),
-      phone: sanitizeHtml(req.body.phone, { allowedTags: [], allowedAttributes: {} }),
-      terms: req.body.terms // This is a boolean, no need to sanitize
-  };
-    const parseData = userSchema.parse(sanitizedData);
-
-    const hashPassword = await bcrypt.hash(parseData.password, 10);
-
+    const {name,email,password,phone, terms} = req.body
     const existingUser = await user.findOne({
-      email: parseData.email,
+      email,
     });
     const existingNumber = await user.findOne({
-      phone: parseData.phone,
+     phone,
     });
 
     if (existingUser) {
@@ -55,34 +26,24 @@ const registerUser = async (req, res) => {
       });
     }
 
-    const newUser = new user({
-      name: parseData.name,
-      email: parseData.email,
-      password: hashPassword,
-      phone: parseData.phone,
-      terms: parseData.terms,
+    const newUser = await user.createUser({
+      name,
+      email,
+      password,
+      phone,
+      terms,
     });
-
-    await newUser.save();
     return res.status(201).json({
       newUser,
       success: true,
       message: "User registered successfully",
     });
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      const errors = error.errors.map((err) => ({
-        path: err.path.join("."),
-        message: err.message,
-      }));
+      const errors = Object.values(error.errors).map(e => ({message:  e.message}))
       return res.status(400).json({ errors });
     }
-    console.log(error);
 
-    return res
-      .status(500)
-      .json({ success: false, message: "Something went wrong" });
-  }
+   
 };
 
 const loginUser = async (req, res) => {
@@ -99,7 +60,7 @@ const loginUser = async (req, res) => {
         message: "User with this email doesn't exist",
       });
     }
-    const comparedPassword = await bcrypt.compare(
+    const comparedPassword = await  bcrypt.compare(
       data.password,
       findUser.password
     );
@@ -119,7 +80,7 @@ const loginUser = async (req, res) => {
   } catch (error) {
     return res
       .status(500)
-      .json({ success: false, message: "Something went wrong" });
+      .json({ success: false, message: "Something went wrong",error });
   }
 };
 
