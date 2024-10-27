@@ -7,15 +7,25 @@ import { zodResolver } from "@hookform/resolvers/zod";
 
 import { Eye, EyeClosed, EyeClosedIcon, Loader2 } from "lucide-react";
 import axios from "axios";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useNavigate } from "react-router-dom";
+import Cookies from "js-cookie";
 const UserForm = () => {
   const [state, setState] = useState("register");
   const [showPassword, setShowPassword] = useState(false);
-const navigate = useNavigate()
+  const [sessionDetails, setSesstionDetails] = useState({});
+  const [is2FAEnable, setIs2FAEnable] = useState(true);
+  const navigate = useNavigate();
   const registerSchema = z.object({
     name: z
       .string()
@@ -64,6 +74,36 @@ const navigate = useNavigate()
             password: "",
           },
   });
+  const getUserIP = async () => {
+    try {
+      const response = await axios.get("https://api.ipify.org?format=json");
+      return response.data.ip;
+    } catch (error) {
+      console.error("Error fetching IP address:", error);
+      return null;
+    }
+  };
+
+  const getSessionDetails = async () => {
+    // Device info from User-Agent
+    const userAgent = navigator.userAgent;
+    const ipAddress = await getUserIP();
+    // Browser info (simplified)
+    const browserInfo = {
+      name: navigator.appName,
+    };
+
+    setSesstionDetails({
+      device: userAgent,
+      browser: browserInfo.name,
+      ipAddress: ipAddress,
+    });
+  };
+
+  useEffect(() => {
+    getSessionDetails();
+    console.log(sessionDetails);
+  }, []);
 
   const onSubmit = async (values) => {
     let url = "http://localhost:4000/api/user";
@@ -75,13 +115,31 @@ const navigate = useNavigate()
       url += "/login";
     }
     try {
-      const response = await axios.post(url, values);
+      const response = await axios.post(
+        url,
+        { ...values, ...sessionDetails },
+        { withCredentials: true }
+      );
 
       if (response.data.success) {
-        toast.success(response.data.message);
-        navigate("/success")
+        const user = response.data.findUser
+        toast.success("OTP sent to your email. Please check your inbox")
+        setIs2FAEnable(user.is2FAEnable)
+        if (state === "login") {
+          if(is2FAEnable){
+            navigate(`/otp/${user._id}`);
+          }else{
+            navigate("/success");
+          }
+        } else {
+          navigate("/success");
+        }
+
+        Cookies.set("token", response.data.cookie);
         form.reset();
       } else {
+        console.log(response.data.message);
+        
         toast.error(response.data.message);
       }
     } catch (error) {
@@ -90,6 +148,8 @@ const navigate = useNavigate()
           form.setError({ message: err.message });
         });
       } else {
+        console.log(error);
+        
         toast.error("Something went wrong. Please try again");
       }
     }
@@ -228,6 +288,7 @@ const navigate = useNavigate()
                 </p>
               )}
             </div>
+
             <Button
               type="submit"
               className="bg-rose-500 text-white hover:bg-rose-600"

@@ -41,6 +41,17 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       required: true,
     },
+    is2FAEnable: {
+      type: String,
+      default: true,
+    },
+    session: [
+      {
+        device: String,
+        browser: String,
+        location: String,
+      },
+    ],
   },
   { timestamps: true }
 );
